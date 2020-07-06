@@ -178,6 +178,16 @@ async function run() {
             core.warning("Passing the GOFLAGS env parameter to the init action is deprecated. Please move this to the analyze action.");
         }
 
+        // Setup Python depencencies
+        if (languages.includes('python')) {
+            const setupPythonDependencies = core.getInput('setup-python-dependencies', { required: true });
+            if (setupPythonDependencies) {
+                // Setup tools
+                // Install dependencies
+            }
+            // Call script for setting environment variables
+        }
+
         // Setup CODEQL_RAM flag (todo improve this https://github.com/github/dsp-code-scanning/issues/935)
         const codeqlRam = process.env['CODEQL_RAM'] || '6500';
         core.exportVariable('CODEQL_RAM', codeqlRam);
