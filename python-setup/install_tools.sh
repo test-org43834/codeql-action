@@ -1,5 +1,7 @@
 #!/bin/sh
+echo 'set -x'
 set -x
+echo 'set -e'
 set -e
 
 # The binaries for packages installed with `pip install --user` are not available on PATH
@@ -8,17 +10,23 @@ set -e
 #
 # Using `::add-path::` from the actions toolkit is not enough, since that only affects
 # subsequent actions in the current job, and not the current action.
+echo 'export PATH="$HOME/.local/bin:$PATH"'
 export PATH="$HOME/.local/bin:$PATH"
 
+echo 'python2 -m pip install --user --upgrade pip setuptools wheel'
 python2 -m pip install --user --upgrade pip setuptools wheel
+echo 'python3 -m pip install --user --upgrade pip setuptools wheel'
 python3 -m pip install --user --upgrade pip setuptools wheel
 
 # virtualenv is a bit nicer for setting up virtual environment, since it will provide up-to-date versions of
 # pip/setuptools/wheel which basic `python3 -m venv venv` won't
+echo 'python2 -m pip install --user virtualenv'
 python2 -m pip install --user virtualenv
+echo 'python3 -m pip install --user virtualenv'
 python3 -m pip install --user virtualenv
 
 # venv is required for installation of poetry or pipenv (I forgot which)
+echo 'sudo apt-get install -y python3-venv'
 sudo apt-get install -y python3-venv
 
 # We're install poetry with pip instead of the recommended way, since the recommended way
@@ -28,4 +36,5 @@ sudo apt-get install -y python3-venv
 #       "program uses threads.", RuntimeWarning)
 #     LGTM_PYTHON_SETUP_VERSION=The currently activated Python version 2.7.18 is not supported by the project (^3.5). Trying to find and use a compatible version. Using python3 (3.8.2) 3
 
+echo 'python3 -m pip install --user poetry pipenv'
 python3 -m pip install --user poetry pipenv
