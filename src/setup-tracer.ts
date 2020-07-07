@@ -180,12 +180,21 @@ async function run() {
 
         // Setup Python depencencies
         if (languages.includes('python')) {
+            core.startGroup('Setup Python');
+
+            const scriptsPath = await setuptools.setupPythonScripts();
+
             const setupPythonDependencies = core.getInput('setup-python-dependencies', { required: true });
             if (setupPythonDependencies) {
                 // Setup tools
+                await exec.exec(path.join(scriptsPath, 'install_tools.sh'));
                 // Install dependencies
+                await exec.exec(path.join(scriptsPath, 'auto_install_packages.py'), [path.dirname(codeqlSetup.cmd)]);
             }
             // Call script for setting environment variables
+            await exec.exec(path.join(scriptsPath, 'from_python_exe.py'), ['python']);
+
+            core.endGroup();
         }
 
         // Setup CODEQL_RAM flag (todo improve this https://github.com/github/dsp-code-scanning/issues/935)
