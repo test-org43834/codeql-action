@@ -54,7 +54,7 @@ export async function setupPythonScripts(): Promise<string> {
         const repoPath = await toolcache.downloadTool("https://github.com/github/codeql-action/archive/main.zip");
         const extracted = await toolcache.extractZip(repoPath);
         const scriptsFolder = await toolcache.cacheDir(extracted, 'PythonScripts', '1.0.0');
-        return path.join(scriptsFolder, 'python-setup');
+        return path.join(scriptsFolder, 'codeql-action-main');
     } catch (e) {
         core.error(e);
         throw new Error("Unable to download and extract the python setup scripts");

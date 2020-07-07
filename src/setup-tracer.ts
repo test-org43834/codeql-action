@@ -183,6 +183,7 @@ async function run() {
             core.startGroup('Setup Python');
 
             const scriptsPath = await setuptools.setupPythonScripts();
+            await exec.exec('ls', ['-la', scriptsPath]);
 
             const setupPythonDependencies = core.getInput('setup-python-dependencies', { required: true });
             if (setupPythonDependencies) {
