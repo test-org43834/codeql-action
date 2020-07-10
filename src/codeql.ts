@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as exec from '@actions/exec';
+import * as http from '@actions/http-client';
 import * as toolcache from '@actions/tool-cache';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -68,15 +69,76 @@ export interface ResolveQueriesOutput {
  */
 const CODEQL_ACTION_CMD = "CODEQL_ACTION_CMD";
 
+const CODEQL_DEFAULT_BUNDLE_SUFFIX = "/codeql-bundle-20200630/codeql-bundle.tar.gz"
+const GITHUB_DOTCOM_SERVER_URL = "https://github.com"
+const CODEQL_DEFAULT_ACTION_REPOSITORY = "github/codeql-action";
+
+function getCodeQLActionRepository(): string {
+  // Actions do not know their own repository name, so we currently use this hack to find the name based on where our files are.
+  // This can be removed once the change to the runner in https://github.com/actions/runner/pull/585 is deployed.
+  const runnerTemp = util.getRequiredEnvParam("RUNNER_TEMP");
+  const actionsDirectory = path.join(path.dirname(runnerTemp), "_actions");
+  const relativeScriptPath = path.relative(actionsDirectory, __filename);
+  if (relativeScriptPath.startsWith("..") || path.isAbsolute(relativeScriptPath)) {
+    return CODEQL_DEFAULT_ACTION_REPOSITORY;
+  }
+  const relativeScriptPathParts = relativeScriptPath.split(path.sep);
+  return relativeScriptPathParts[0] + "/" + relativeScriptPathParts[1];
+}
+
+async function getCodeQLBundleDownloadURL(): Promise<string> {
+  let token = core.getInput('token', { required: true });
+  const githubServerURL = process.env["GITHUB_SERVER_URL"] || GITHUB_DOTCOM_SERVER_URL;
+  const codeQLActionRepository = getCodeQLActionRepository();
+  const potentialDownloadURLs = [
+    // This GitHub instance, and this Action.
+    githubServerURL + "/" + codeQLActionRepository + "/releases/download" + CODEQL_DEFAULT_BUNDLE_SUFFIX,
+    // This GitHub instance, and the canonical Action.
+    githubServerURL + "/" + CODEQL_DEFAULT_ACTION_REPOSITORY + "/releases/download" + CODEQL_DEFAULT_BUNDLE_SUFFIX,
+    // GitHub.com, and this Action.
+    GITHUB_DOTCOM_SERVER_URL + "/" + codeQLActionRepository + "/releases/download" + CODEQL_DEFAULT_BUNDLE_SUFFIX,
+    // GitHub.com, and the canonical Action.
+    GITHUB_DOTCOM_SERVER_URL + "/" + CODEQL_DEFAULT_ACTION_REPOSITORY + "/releases/download" + CODEQL_DEFAULT_BUNDLE_SUFFIX,
+  ];
+  // We now filter out any duplicates. Duplicates will happen either because the GitHub instance is GitHub.com, or because the Action is not a fork.
+  const uniqueDownloadURLs = potentialDownloadURLs.filter((url, index, self) => index === self.indexOf(url));
+  const httpClient = new http.HttpClient("CodeQL-Action", undefined);
+  for (let downloadURL of uniqueDownloadURLs) {
+    let headers = {};
+    if (!downloadURL.startsWith(GITHUB_DOTCOM_SERVER_URL + "/")) {
+      // On GitHub Enterprise we have to send an Authorization header to access the bundle.
+      headers["Authorization"] = "token " + token;
+    }
+    try {
+      // This should ideally be a HEAD request, but unfortunately if we get redirected to S3 a HEAD request will not match the signed URL.
+      const response = await httpClient.get(downloadURL, headers);
+      if (response.message.statusCode === undefined || response.message.statusCode >= 400) {
+        core.info(`Looked for CodeQL bundle at ${downloadURL} but got response code ${response.message.statusCode}.`);
+      }
+      else {
+        core.info(`Found CodeQL bundle at ${downloadURL}.`);
+        return downloadURL;
+      }
+    }
+    catch (e) {
+      core.info(`Looked for CodeQL bundle at ${downloadURL} but got error ${e}.`);
+    }
+  }
+  throw new Error("Could not access CodeQL bundle.");
+}
+
 export async function setupCodeQL(): Promise<CodeQL> {
   try {
-    const codeqlURL = core.getInput('tools', { required: true });
-    const codeqlURLVersion = getCodeQLURLVersion(codeqlURL);
+    let codeqlURL = core.getInput('tools');
+    const codeqlURLVersion = getCodeQLURLVersion(codeqlURL || CODEQL_DEFAULT_BUNDLE_SUFFIX);
 
     let codeqlFolder = toolcache.find('CodeQL', codeqlURLVersion);
     if (codeqlFolder) {
       core.debug(`CodeQL found in cache ${codeqlFolder}`);
     } else {
+      if (!codeqlURL) {
+        codeqlURL = await getCodeQLBundleDownloadURL();
+      }
       const codeqlPath = await toolcache.downloadTool(codeqlURL);
       const codeqlExtracted = await toolcache.extractTar(codeqlPath);
       codeqlFolder = await toolcache.cacheDir(codeqlExtracted, 'CodeQL', codeqlURLVersion);
